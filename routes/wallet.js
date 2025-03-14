@@ -5,38 +5,56 @@ const fs = require("fs");
 
 // TODO : lightwallet 모듈을 사용하여 랜덤한 니모닉 코드를 얻습니다.
 router.post("/newMnemonic", async (req, res) => {
-  let mnemonic;
   try {
-    mnemonic = lightwallet.keystore.generateRandomSeed();
-    res.json({ mnemonic });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ error: "Mnemonic 생성 중 오류가 발생했습니다." });
+    const mnemonic = lightwallet.keystore.generateRandomSeed();
+    return res.json({ mnemonic });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed generating mnemonic" });
   }
 });
 
 // TODO : 니모닉 코드와 패스워드를 이용해 keystore와 address를 생성합니다.
 router.post("/newWallet", async (req, res) => {
-  let password = req.body.password;
-  let mnemonic = req.body.mnemonic;
+  const { mnemonic, password } = req.body;
+
+  if (!mnemonic || !password) {
+    return res
+      .status(400)
+      .json({ code: 998, message: "Seed phrase & password are required" });
+  }
 
   try {
     lightwallet.keystore.createVault(
       {
-        password: password,
+        password,
         seedPhrase: mnemonic,
         hdPathString: "m/0'/0'/0'",
       },
-      function (err, ks) {
-        ks.keyFromPassword(password, function (err, pwDerivedKey) {
+      (err, ks) => {
+        if (err) {
+          console.log("err", err);
+          res.status(500).json({ code: 999, message: "Vault creation failed" });
+          return;
+        }
+
+        ks.keyFromPassword(password, (err, pwDerivedKey) => {
+          if (err) {
+            res
+              .status(500)
+              .json({ code: 999, message: "Key derivation failed" });
+            return;
+          }
+
           ks.generateNewAddress(pwDerivedKey, 1);
 
-          let address = ks.getAddresses().toString();
+          // let address = ks.getAddresses().toString();
           let keystore = ks.serialize();
 
-          fs.writeFile("wallet.json", keystore, function (err, data) {
+          fs.writeFile("wallet.json", keystore, (err) => {
             if (err) {
-              res.json({ code: 999, message: "실패" });
+              res
+                .status(500)
+                .json({ code: 999, message: "Failed to save wallet file" });
             } else {
               res.json({ code: 1, message: "성공" });
             }
